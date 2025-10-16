@@ -28,6 +28,8 @@
       width: auto;        /* keep aspect ratio */
       max-height: 100vh;  /* don't exceed viewport height */
       display: block;
+      opacity: 0;         /* start hidden for fade-in */
+      transition: opacity 350ms ease; /* smooth fade */
     }
     .overlay {
       position: fixed;
@@ -63,9 +65,25 @@
     function showImage(i) {
       if (!IMAGES.length) return;
       index = (i + IMAGES.length) % IMAGES.length;
-      img.src = IMAGES[index];
-      img.hidden = false;
-      info.textContent = `${index + 1} / ${IMAGES.length}`;
+      const nextSrc = IMAGES[index];
+
+      // Begin fade-out (in case an image is currently visible)
+      img.style.opacity = 0;
+
+      // Use a token to ignore stale onload events if the user advances quickly
+      const token = Symbol();
+      img._loadToken = token;
+
+      img.onload = () => {
+        if (img._loadToken !== token) return; // stale load
+        img.hidden = false;
+        // Small frame delay ensures CSS transition kicks in
+        requestAnimationFrame(() => { img.style.opacity = 1; });
+        info.textContent = `${index + 1} / ${IMAGES.length}`;
+      };
+
+      // Set the new source after handlers are in place
+      img.src = nextSrc;
     }
 
     stage.addEventListener('click', () => showImage(index + 1));
