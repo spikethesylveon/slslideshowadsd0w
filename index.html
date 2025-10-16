@@ -49,6 +49,7 @@
       "https://d.furaffinity.net/art/hungrykep/1746925910/1746925910.hungrykep_img_2984.gif",
       "https://static1.e621.net/data/f2/07/f20703a4320cbb3870a2902ae97525e8.webm"
     ];
+
     const info = document.getElementById('info');
     const stage = document.getElementById('stage');
     const slideA = document.getElementById('slideA');
@@ -174,8 +175,9 @@
     });
 
     (function init(){
-      updateInfo();
       if (!IMAGES.length) return;
+      shuffleTail(IMAGES); // randomize all but first at start
+      updateInfo();
       const first = IMAGES[0];
       const media = createMedia(first);
       front.appendChild(media);
