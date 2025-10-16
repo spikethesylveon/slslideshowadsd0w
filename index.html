@@ -18,18 +18,17 @@
     .stage { position: fixed; inset: 0; display: grid; place-items: center; cursor: pointer; user-select: none; }
     .stack { position: relative; width: 100vw; height: 100vh; }
 
-    /* Each slide is a layer that crossfades */
     .slide { position: absolute; inset: 0; margin: auto; display: grid; place-items: center; opacity: 0; transition: opacity 350ms ease; }
     .slide.is-visible { opacity: 1; }
 
-    /* Media inside slide (either <img> or <video>) */
     .media { display: block; pointer-events: none; }
-    .media::-webkit-media-controls { display: none !important; } /* hide iOS controls just in case */
+    .media::-webkit-media-controls { display: none !important; }
 
     .overlay { position: fixed; left: 50%; bottom: 12px; transform: translateX(-50%); font-size: 12px; color: var(--muted); background: rgba(0,0,0,0.08); padding: 6px 10px; border-radius: 10px; backdrop-filter: blur(2px); }
 
-    .home { position: fixed; left: 12px; bottom: 12px; z-index: 20; padding: 6px 10px; border-radius: 10px; border: 1px solid rgba(0,0,0,0.15); background: rgba(255,255,255,0.7); color: #111; font-size: 16px; backdrop-filter: blur(2px); cursor: pointer; user-select: none; }
+    .home { position: fixed; left: 12px; bottom: 12px; z-index: 20; padding: 6px 10px; border-radius: 10px; border: 1px solid rgba(0,0,0,0.15); background: rgba(255,255,255,0.7); color: #111; font-size: 16px; backdrop-filter: blur(2px); cursor: pointer; user-select: none; transition: opacity 200ms ease; }
     .home:hover { background: rgba(255,255,255,0.9); }
+    .home.hidden { opacity: 0; pointer-events: none; }
   </style>
 </head>
 <body>
@@ -43,7 +42,6 @@
   <button id="homeBtn" class="home" title="Go to first & randomize others">⌂</button>
 
   <script>
-    // === Replace with your media URLs (images or .webm videos) ===
     const IMAGES = [
       "https://cdn.discordapp.com/attachments/709821851446280234/1428519652685910128/KepRoom.png?ex=68f2cc19&is=68f17a99&hm=239143e7df553953e2ef7f26d47c77b31f87dc1818bb8cd842cf018a5ea676de&",
       "https://d.furaffinity.net/art/hungrykep/1751140965/1751140965.hungrykep_ych_animated_bj.gif",
@@ -51,7 +49,6 @@
       "https://d.furaffinity.net/art/hungrykep/1746925910/1746925910.hungrykep_img_2984.gif",
       "https://static1.e621.net/data/f2/07/f20703a4320cbb3870a2902ae97525e8.webm"
     ];
-
     const info = document.getElementById('info');
     const stage = document.getElementById('stage');
     const slideA = document.getElementById('slideA');
@@ -59,14 +56,18 @@
     const homeBtn = document.getElementById('homeBtn');
 
     let index = 0;
-    let front = slideA; // visible
-    let back = slideB;  // loading next
+    let front = slideA;
+    let back = slideB;
 
     function updateInfo(){ info.textContent = `${IMAGES.length ? index + 1 : 0} / ${IMAGES.length}`; }
 
+    function toggleHomeButton(){
+      if (index === 0) homeBtn.classList.add('hidden');
+      else homeBtn.classList.remove('hidden');
+    }
+
     function isVideo(url){ return /\.(webm)(?:$|\?)/i.test(url); }
 
-    // Get natural dimensions for either <img> or <video>
     function getNaturalSize(el){
       if (!el) return {w:0,h:0};
       if (el.tagName === 'IMG') return { w: el.naturalWidth || 0, h: el.naturalHeight || 0 };
@@ -74,7 +75,6 @@
       return {w:0,h:0};
     }
 
-    // Fit media to viewport: contain, preserve aspect; upscale only if BOTH dims smaller
     function sizeToViewport(mediaEl){
       const vw = window.innerWidth; const vh = window.innerHeight;
       const {w: nw, h: nh} = getNaturalSize(mediaEl);
@@ -128,22 +128,19 @@
       index = (i + IMAGES.length) % IMAGES.length;
       const nextSrc = IMAGES[index];
 
-      // Prepare back slide
       clearSlide(back);
       const media = createMedia(nextSrc);
       back.appendChild(media);
 
       onMediaReady(media, () => {
         sizeToViewport(media);
-        // Crossfade
         back.classList.add('is-visible');
         front.classList.remove('is-visible');
-        // Pause previous video (if any) after fade starts
         const prev = front.querySelector('.media');
         if (prev && prev.tagName === 'VIDEO') { try { prev.pause(); } catch(e){} }
-        // Swap layers
         [front, back] = [back, front];
         updateInfo();
+        toggleHomeButton();
         preload(IMAGES[(index + 1) % IMAGES.length]);
       });
     }
@@ -180,10 +177,9 @@
       updateInfo();
       if (!IMAGES.length) return;
       const first = IMAGES[0];
-      // Load first into front without crossfade from blank
       const media = createMedia(first);
       front.appendChild(media);
-      onMediaReady(media, () => { sizeToViewport(media); front.classList.add('is-visible'); updateInfo(); preload(IMAGES[1 % IMAGES.length]); });
+      onMediaReady(media, () => { sizeToViewport(media); front.classList.add('is-visible'); updateInfo(); toggleHomeButton(); preload(IMAGES[1 % IMAGES.length]); });
     })();
   </script>
 </body>
