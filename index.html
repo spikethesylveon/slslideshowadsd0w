@@ -3,50 +3,54 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Click-to-Advance Slideshow</title>
+  <title>Click-to-Advance Slideshow — Crossfade, Contain, Smart Upscale</title>
   <style>
-    html, body {
+    :root { --bg: #ffe6f0; --fg: #222; --muted: #6a6a6a; }
+    html, body { height: 100%; }
+    body {
       margin: 0;
-      padding: 0;
-      background-color: #ffe6f0; /* light pink */
-      color: #e7e7ea;
-      font-family: sans-serif;
-      height: 100%;
-      overflow: hidden;
+      background: var(--bg); /* light pink */
+      color: var(--fg);
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+      overflow: hidden; /* we'll size images to fit viewport */
     }
+
+    /* Stage centers content; clicking advances. */
     .stage {
-      position: fixed;
-      inset: 0;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      overflow: auto;
+      position: fixed; inset: 0;
+      display: grid; place-items: center;
       cursor: pointer;
+      user-select: none;
     }
-    .stage img {
-      height: 100vh;      /* match viewport height */
-      width: auto;        /* keep aspect ratio */
-      max-height: 100vh;  /* don't exceed viewport height */
+
+    /* Stack: two images layered for crossfade. */
+    .stack { position: relative; width: 100vw; height: 100vh; }
+    .slide {
+      position: absolute; inset: 0; margin: auto; /* center */
       display: block;
-      opacity: 0;         /* start hidden for fade-in */
-      transition: opacity 350ms ease; /* smooth fade */
+      /* We will set width/height via JS to preserve aspect and containment. */
+      opacity: 0; transition: opacity 350ms ease;
+      image-rendering: auto;
+      /* prevent ghost drag */
+      pointer-events: none;
     }
+    .slide.is-visible { opacity: 1; }
+
+    /* Bottom overlay info */
     .overlay {
-      position: fixed;
-      bottom: 10px;
-      left: 50%;
-      transform: translateX(-50%);
-      color: #9b9ba1;
-      font-size: 14px;
-      background: rgba(0, 0, 0, 0.5);
-      padding: 6px 12px;
-      border-radius: 8px;
+      position: fixed; left: 50%; bottom: 12px; transform: translateX(-50%);
+      font-size: 12px; color: var(--muted);
+      background: rgba(0,0,0,0.08); padding: 6px 10px; border-radius: 10px;
+      backdrop-filter: blur(2px);
     }
   </style>
 </head>
 <body>
-  <div id="stage" class="stage">
-    <img id="slide" src="" alt="Slideshow image" hidden>
+  <div id="stage" class="stage" title="Click to go to next image (←/→ also work)">
+    <div class="stack" aria-live="polite" aria-atomic="true">
+      <img id="imgA" class="slide" alt="" />
+      <img id="imgB" class="slide" alt="" />
+    </div>
   </div>
   <div id="info" class="overlay">0 / 0</div>
 
@@ -57,42 +61,100 @@
       "https://d.furaffinity.net/art/hungrykep/1751818888/1751818888.hungrykep_img_3085.gif"
     ];
 
-    const img = document.getElementById('slide');
     const info = document.getElementById('info');
     const stage = document.getElementById('stage');
-    let index = 0;
+    const imgA = document.getElementById('imgA');
+    const imgB = document.getElementById('imgB');
 
-    function showImage(i) {
+    let index = 0;
+    let front = imgA; // currently visible (or to be visible)
+    let back = imgB;  // next image fades in on top, then swap
+
+    function updateInfo(){ info.textContent = `${IMAGES.length ? index + 1 : 0} / ${IMAGES.length}`; }
+
+    // Compute target displayed size to ensure the FULL image is visible without cropping.
+    // Rules:
+    // 1) Always preserve aspect ratio.
+    // 2) Scale DOWN to fit inside viewport when needed.
+    // 3) ONLY scale UP if BOTH natural width and height are smaller than the viewport (i.e., neither matches/exceeds page resolution).
+    function sizeToViewport(img){
+      const vw = window.innerWidth; const vh = window.innerHeight;
+      const nw = img.naturalWidth;  const nh = img.naturalHeight;
+      if (!nw || !nh) return;
+
+      // candidate scales to fit each dimension
+      const scaleToFit = Math.min(vw / nw, vh / nh);
+
+      let scale;
+      const bothSmaller = (nw < vw && nh < vh);
+      if (bothSmaller) {
+        // allow upscale (but not beyond exact contain)
+        scale = Math.min(1e4, scaleToFit);
+      } else {
+        // at least one dimension >= viewport => don't upscale, only downscale
+        scale = Math.min(1, scaleToFit);
+      }
+
+      const dispW = Math.round(nw * scale);
+      const dispH = Math.round(nh * scale);
+      img.style.width  = dispW + 'px';
+      img.style.height = dispH + 'px';
+      // Centering handled by absolute + margin:auto in CSS
+    }
+
+    function preload(url){ const im = new Image(); im.src = url; }
+
+    function showImage(i){
       if (!IMAGES.length) return;
       index = (i + IMAGES.length) % IMAGES.length;
       const nextSrc = IMAGES[index];
 
-      // Begin fade-out (in case an image is currently visible)
-      img.style.opacity = 0;
-
-      // Use a token to ignore stale onload events if the user advances quickly
+      // Prepare back image to load next source
       const token = Symbol();
-      img._loadToken = token;
+      back._loadToken = token;
 
-      img.onload = () => {
-        if (img._loadToken !== token) return; // stale load
-        img.hidden = false;
-        // Small frame delay ensures CSS transition kicks in
-        requestAnimationFrame(() => { img.style.opacity = 1; });
-        info.textContent = `${index + 1} / ${IMAGES.length}`;
+      // Start crossfade: make front visible (if first render it may still be hidden)
+      front.classList.add('is-visible');
+
+      back.onload = () => {
+        if (back._loadToken !== token) return; // stale load guard
+        sizeToViewport(back);
+        // bring back to front by making it visible; front will fade out
+        back.classList.add('is-visible');
+        front.classList.remove('is-visible');
+        // Swap roles
+        [front, back] = [back, front];
+        updateInfo();
+        // Preload the next image for snappier transitions
+        preload(IMAGES[(index + 1) % IMAGES.length]);
       };
 
-      // Set the new source after handlers are in place
-      img.src = nextSrc;
+      // Set src AFTER onload is attached
+      back.src = nextSrc;
     }
 
+    // Advance on click / arrows
     stage.addEventListener('click', () => showImage(index + 1));
-    window.addEventListener('keydown', e => {
-      if (e.key === 'ArrowRight' || e.key === ' ') showImage(index + 1);
-      if (e.key === 'ArrowLeft') showImage(index - 1);
+    window.addEventListener('keydown', (e) => {
+      if (!IMAGES.length) return;
+      if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); showImage(index + 1); }
+      else if (e.key === 'ArrowLeft') { e.preventDefault(); showImage(index - 1); }
     });
 
-    showImage(0);
+    // Resize handler to re-fit current image
+    window.addEventListener('resize', () => {
+      sizeToViewport(front);
+      sizeToViewport(back);
+    });
+
+    // Initialize: load first image into front directly so we avoid a first blank fade
+    (function init(){
+      updateInfo();
+      if (!IMAGES.length) return;
+      const first = IMAGES[0];
+      front.onload = () => { sizeToViewport(front); front.classList.add('is-visible'); updateInfo(); preload(IMAGES[1 % IMAGES.length]); };
+      front.src = first;
+    })();
   </script>
 </body>
 </html>
