@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Click‑to‑Advance Slideshow (Preset URLs)</title>
+  <style>
+    :root {--bg:#0e0e10; --fg:#e7e7ea; --muted:#9b9ba1;}
+    html,body{height:100%;}
+    body{margin:0;background:var(--bg);color:var(--fg);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,Apple Color Emoji,Segoe UI Emoji;}
+
+    /* Stage shows images at their native pixel size. */
+    .stage{position:fixed;inset:0;overflow:auto;display:grid;place-items:center;cursor:pointer}
+    .stage:active{cursor:grabbing}
+    .stage__img{max-width:none;max-height:none;display:block}
+
+    /* Bottom overlay */
+    .overlay{position:fixed;inset:auto 12px 12px 12px;display:flex;justify-content:space-between;align-items:center;gap:12px;color:var(--muted);font-size:12px;pointer-events:none}
+    .badge{background:#17171a;border:1px solid #2a2a2f;padding:6px 10px;border-radius:999px}
+  </style>
+</head>
+<body>
+  <div id="stage" class="stage" title="Click to go to next image">
+    <img id="img" class="stage__img" alt="" hidden />
+  </div>
+
+  <div class="overlay">
+    <div id="fileLabel" class="badge">Loading…</div>
+    <div id="indexLabel" class="badge">0 / 0</div>
+  </div>
+
+  <script>
+  // === Configure your slideshow here ===
+  // Put direct links (absolute URLs) to your images below.
+  // Examples are placeholders — replace with your own.
+  const IMAGES = [
+    // 'https://example.com/path/photo1.jpg',
+    // 'https://example.com/path/photo2.png',
+    // 'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee',
+  ];
+  // =====================================
+
+  (function(){
+    const stage = document.getElementById('stage');
+    const imgEl = document.getElementById('img');
+    const fileLabel = document.getElementById('fileLabel');
+    const indexLabel = document.getElementById('indexLabel');
+
+    let i = 0;
+
+    function nameFromUrl(u){
+      try{ const url = new URL(u); return decodeURIComponent((url.pathname.split('/').pop()||'').split('?')[0]) || u; }
+      catch{ return u; }
+    }
+
+    function setOverlay(){
+      if(IMAGES.length){
+        fileLabel.textContent = nameFromUrl(IMAGES[i]);
+        indexLabel.textContent = (i+1) + ' / ' + IMAGES.length;
+      }else{
+        fileLabel.textContent = 'No images configured';
+        indexLabel.textContent = '0 / 0';
+      }
+    }
+
+    function show(idx){
+      if(!IMAGES.length) return;
+      i = (idx + IMAGES.length) % IMAGES.length;
+      const url = IMAGES[i];
+      stage.scrollTo({top:0,left:0,behavior:'instant'});
+      imgEl.src = url;
+      imgEl.hidden = false;
+      setOverlay();
+      preload(i+1);
+    }
+
+    function preload(idx){
+      if(!IMAGES.length) return;
+      const j = (idx + IMAGES.length) % IMAGES.length;
+      const im = new Image();
+      im.src = IMAGES[j];
+    }
+
+    // Click anywhere to advance
+    stage.addEventListener('click', ()=>{ if(IMAGES.length) show(i+1); });
+
+    // Optional keyboard shortcuts
+    window.addEventListener('keydown', (e)=>{
+      if(!IMAGES.length) return;
+      if(e.key === 'ArrowRight' || e.key === ' '){ e.preventDefault(); show(i+1); }
+      else if(e.key === 'ArrowLeft'){ e.preventDefault(); show(i-1); }
+    });
+
+    // Kick things off
+    setOverlay();
+    if(IMAGES.length){ show(0); }
+  })();
+  </script>
+</body>
+</html>
