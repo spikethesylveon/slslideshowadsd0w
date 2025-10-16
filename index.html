@@ -9,13 +9,12 @@
     html, body { height: 100%; }
     body {
       margin: 0;
-      background: var(--bg); /* light pink */
+      background: var(--bg);
       color: var(--fg);
       font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
-      overflow: hidden; /* we'll size images to fit viewport */
+      overflow: hidden;
     }
 
-    /* Stage centers content; clicking advances. */
     .stage {
       position: fixed; inset: 0;
       display: grid; place-items: center;
@@ -23,31 +22,27 @@
       user-select: none;
     }
 
-    /* Stack: two images layered for crossfade. */
     .stack { position: relative; width: 100vw; height: 100vh; }
     .slide {
-      position: absolute; inset: 0; margin: auto; /* center */
+      position: absolute; inset: 0; margin: auto;
       display: block;
-      /* We will set width/height via JS to preserve aspect and containment. */
       opacity: 0; transition: opacity 350ms ease;
       image-rendering: auto;
-      /* prevent ghost drag */
       pointer-events: none;
     }
     .slide.is-visible { opacity: 1; }
 
-    /* Bottom overlay info */
     .overlay {
       position: fixed; left: 50%; bottom: 12px; transform: translateX(-50%);
       font-size: 12px; color: var(--muted);
       background: rgba(0,0,0,0.08); padding: 6px 10px; border-radius: 10px;
       backdrop-filter: blur(2px);
     }
-      /* Home button (lower-left) */
+
     .home {
       position: fixed; left: 12px; bottom: 12px; z-index: 20;
       padding: 6px 10px; border-radius: 10px; border: 1px solid rgba(0,0,0,0.15);
-      background: rgba(255,255,255,0.7); color: #111; font-size: 12px;
+      background: rgba(255,255,255,0.7); color: #111; font-size: 16px;
       backdrop-filter: blur(2px);
       cursor: pointer; user-select: none;
     }
@@ -62,10 +57,9 @@
     </div>
   </div>
   <div id="info" class="overlay">0 / 0</div>
-  <button id="homeBtn" class="home" title="Go to first & randomize others">⌂ Home</button>
+  <button id="homeBtn" class="home" title="Go to first & randomize others">⌂</button>
 
   <script>
-    // === Replace with your image URLs ===
     const IMAGES = [
       "https://d.furaffinity.net/art/hungrykep/1751140965/1751140965.hungrykep_ych_animated_bj.gif",
       "https://d.furaffinity.net/art/hungrykep/1751818888/1751818888.hungrykep_img_3085.gif",
@@ -79,39 +73,24 @@
     const homeBtn = document.getElementById('homeBtn');
 
     let index = 0;
-    let front = imgA; // currently visible (or to be visible)
-    let back = imgB;  // next image fades in on top, then swap
+    let front = imgA;
+    let back = imgB;
 
     function updateInfo(){ info.textContent = `${IMAGES.length ? index + 1 : 0} / ${IMAGES.length}`; }
 
-    // Compute target displayed size to ensure the FULL image is visible without cropping.
-    // Rules:
-    // 1) Always preserve aspect ratio.
-    // 2) Scale DOWN to fit inside viewport when needed.
-    // 3) ONLY scale UP if BOTH natural width and height are smaller than the viewport (i.e., neither matches/exceeds page resolution).
     function sizeToViewport(img){
       const vw = window.innerWidth; const vh = window.innerHeight;
       const nw = img.naturalWidth;  const nh = img.naturalHeight;
       if (!nw || !nh) return;
 
-      // candidate scales to fit each dimension
       const scaleToFit = Math.min(vw / nw, vh / nh);
-
-      let scale;
       const bothSmaller = (nw < vw && nh < vh);
-      if (bothSmaller) {
-        // allow upscale (but not beyond exact contain)
-        scale = Math.min(1e4, scaleToFit);
-      } else {
-        // at least one dimension >= viewport => don't upscale, only downscale
-        scale = Math.min(1, scaleToFit);
-      }
+      const scale = bothSmaller ? scaleToFit : Math.min(1, scaleToFit);
 
       const dispW = Math.round(nw * scale);
       const dispH = Math.round(nh * scale);
       img.style.width  = dispW + 'px';
       img.style.height = dispH + 'px';
-      // Centering handled by absolute + margin:auto in CSS
     }
 
     function preload(url){ const im = new Image(); im.src = url; }
@@ -137,23 +116,20 @@
       back.src = nextSrc;
     }
 
-    // Shuffle all images except the first (anchor at index 0)
     function shuffleTail(arr){
-      if (arr.length <= 2) return; // nothing or only one to shuffle
+      if (arr.length <= 2) return;
       for (let j = arr.length - 1; j > 1; j--) {
-        const k = 1 + Math.floor(Math.random() * j); // k in [1, j]
+        const k = 1 + Math.floor(Math.random() * j);
         [arr[j], arr[k]] = [arr[k], arr[j]];
       }
     }
 
-    // Home button: randomize order (except first), jump to first
     homeBtn.addEventListener('click', (e)=>{
-      e.stopPropagation(); // prevent stage click advance
+      e.stopPropagation();
       shuffleTail(IMAGES);
       showImage(0);
     });
 
-    // Advance on click / arrows
     stage.addEventListener('click', () => showImage(index + 1));
     window.addEventListener('keydown', (e) => {
       if (!IMAGES.length) return;
@@ -161,13 +137,11 @@
       else if (e.key === 'ArrowLeft') { e.preventDefault(); showImage(index - 1); }
     });
 
-    // Resize handler to re-fit current image
     window.addEventListener('resize', () => {
       sizeToViewport(front);
       sizeToViewport(back);
     });
 
-    // Initialize: load first image into front directly so we avoid a first blank fade
     (function init(){
       updateInfo();
       if (!IMAGES.length) return;
