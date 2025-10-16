@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Click-to-Advance Slideshow — Crossfade, Contain, Smart Upscale</title>
+  <title>Click-to-Advance Slideshow — Crossfade, Images + WebM</title>
   <style>
     :root { --bg: #ffe6f0; --fg: #222; --muted: #6a6a6a; }
     html, body { height: 100%; }
@@ -15,51 +15,35 @@
       overflow: hidden;
     }
 
-    .stage {
-      position: fixed; inset: 0;
-      display: grid; place-items: center;
-      cursor: pointer;
-      user-select: none;
-    }
-
+    .stage { position: fixed; inset: 0; display: grid; place-items: center; cursor: pointer; user-select: none; }
     .stack { position: relative; width: 100vw; height: 100vh; }
-    .slide {
-      position: absolute; inset: 0; margin: auto;
-      display: block;
-      opacity: 0; transition: opacity 350ms ease;
-      image-rendering: auto;
-      pointer-events: none;
-    }
+
+    /* Each slide is a layer that crossfades */
+    .slide { position: absolute; inset: 0; margin: auto; display: grid; place-items: center; opacity: 0; transition: opacity 350ms ease; }
     .slide.is-visible { opacity: 1; }
 
-    .overlay {
-      position: fixed; left: 50%; bottom: 12px; transform: translateX(-50%);
-      font-size: 12px; color: var(--muted);
-      background: rgba(0,0,0,0.08); padding: 6px 10px; border-radius: 10px;
-      backdrop-filter: blur(2px);
-    }
+    /* Media inside slide (either <img> or <video>) */
+    .media { display: block; pointer-events: none; }
+    .media::-webkit-media-controls { display: none !important; } /* hide iOS controls just in case */
 
-    .home {
-      position: fixed; left: 12px; bottom: 12px; z-index: 20;
-      padding: 6px 10px; border-radius: 10px; border: 1px solid rgba(0,0,0,0.15);
-      background: rgba(255,255,255,0.7); color: #111; font-size: 16px;
-      backdrop-filter: blur(2px);
-      cursor: pointer; user-select: none;
-    }
+    .overlay { position: fixed; left: 50%; bottom: 12px; transform: translateX(-50%); font-size: 12px; color: var(--muted); background: rgba(0,0,0,0.08); padding: 6px 10px; border-radius: 10px; backdrop-filter: blur(2px); }
+
+    .home { position: fixed; left: 12px; bottom: 12px; z-index: 20; padding: 6px 10px; border-radius: 10px; border: 1px solid rgba(0,0,0,0.15); background: rgba(255,255,255,0.7); color: #111; font-size: 16px; backdrop-filter: blur(2px); cursor: pointer; user-select: none; }
     .home:hover { background: rgba(255,255,255,0.9); }
   </style>
 </head>
 <body>
-  <div id="stage" class="stage" title="Click to go to next image (←/→ also work)">
+  <div id="stage" class="stage" title="Click to go to next media (←/→ also work)">
     <div class="stack" aria-live="polite" aria-atomic="true">
-      <img id="imgA" class="slide" alt="" />
-      <img id="imgB" class="slide" alt="" />
+      <div id="slideA" class="slide"></div>
+      <div id="slideB" class="slide"></div>
     </div>
   </div>
   <div id="info" class="overlay">0 / 0</div>
   <button id="homeBtn" class="home" title="Go to first & randomize others">⌂</button>
 
   <script>
+    // === Replace with your media URLs (images or .webm videos) ===
     const IMAGES = [
       "https://cdn.discordapp.com/attachments/709821851446280234/1428519652685910128/KepRoom.png?ex=68f2cc19&is=68f17a99&hm=239143e7df553953e2ef7f26d47c77b31f87dc1818bb8cd842cf018a5ea676de&",
       "https://d.furaffinity.net/art/hungrykep/1751140965/1751140965.hungrykep_ych_animated_bj.gif",
@@ -70,52 +54,98 @@
 
     const info = document.getElementById('info');
     const stage = document.getElementById('stage');
-    const imgA = document.getElementById('imgA');
-    const imgB = document.getElementById('imgB');
+    const slideA = document.getElementById('slideA');
+    const slideB = document.getElementById('slideB');
     const homeBtn = document.getElementById('homeBtn');
 
     let index = 0;
-    let front = imgA;
-    let back = imgB;
+    let front = slideA; // visible
+    let back = slideB;  // loading next
 
     function updateInfo(){ info.textContent = `${IMAGES.length ? index + 1 : 0} / ${IMAGES.length}`; }
 
-    function sizeToViewport(img){
-      const vw = window.innerWidth; const vh = window.innerHeight;
-      const nw = img.naturalWidth;  const nh = img.naturalHeight;
-      if (!nw || !nh) return;
+    function isVideo(url){ return /\.(webm)(?:$|\?)/i.test(url); }
 
+    // Get natural dimensions for either <img> or <video>
+    function getNaturalSize(el){
+      if (!el) return {w:0,h:0};
+      if (el.tagName === 'IMG') return { w: el.naturalWidth || 0, h: el.naturalHeight || 0 };
+      if (el.tagName === 'VIDEO') return { w: el.videoWidth || 0, h: el.videoHeight || 0 };
+      return {w:0,h:0};
+    }
+
+    // Fit media to viewport: contain, preserve aspect; upscale only if BOTH dims smaller
+    function sizeToViewport(mediaEl){
+      const vw = window.innerWidth; const vh = window.innerHeight;
+      const {w: nw, h: nh} = getNaturalSize(mediaEl);
+      if (!nw || !nh) return;
       const scaleToFit = Math.min(vw / nw, vh / nh);
       const bothSmaller = (nw < vw && nh < vh);
       const scale = bothSmaller ? scaleToFit : Math.min(1, scaleToFit);
-
       const dispW = Math.round(nw * scale);
       const dispH = Math.round(nh * scale);
-      img.style.width  = dispW + 'px';
-      img.style.height = dispH + 'px';
+      mediaEl.style.width  = dispW + 'px';
+      mediaEl.style.height = dispH + 'px';
     }
 
-    function preload(url){ const im = new Image(); im.src = url; }
+    function clearSlide(slide){
+      const m = slide.querySelector('.media');
+      if (m && m.tagName === 'VIDEO') { try { m.pause(); m.src = ''; m.load(); } catch(e){} }
+      slide.innerHTML = '';
+      slide.classList.remove('is-visible');
+    }
+
+    function createMedia(url){
+      if (isVideo(url)){
+        const v = document.createElement('video');
+        v.className = 'media';
+        v.playsInline = true; v.muted = true; v.loop = true; v.autoplay = true; v.preload = 'auto';
+        v.src = url;
+        return v;
+      } else {
+        const im = document.createElement('img');
+        im.className = 'media';
+        im.alt = '';
+        im.src = url;
+        return im;
+      }
+    }
+
+    function preload(url){ if (isVideo(url)) { const v = document.createElement('video'); v.preload = 'metadata'; v.src = url; } else { const im = new Image(); im.src = url; } }
+
+    function onMediaReady(mediaEl, cb){
+      if (mediaEl.tagName === 'IMG'){
+        if (mediaEl.complete && mediaEl.naturalWidth) { cb(); }
+        else mediaEl.onload = cb;
+      } else if (mediaEl.tagName === 'VIDEO'){
+        if (mediaEl.readyState >= 1 && mediaEl.videoWidth) { cb(); }
+        else mediaEl.onloadedmetadata = cb;
+      }
+    }
 
     function showImage(i){
       if (!IMAGES.length) return;
       index = (i + IMAGES.length) % IMAGES.length;
       const nextSrc = IMAGES[index];
 
-      const token = Symbol();
-      back._loadToken = token;
-      front.classList.add('is-visible');
+      // Prepare back slide
+      clearSlide(back);
+      const media = createMedia(nextSrc);
+      back.appendChild(media);
 
-      back.onload = () => {
-        if (back._loadToken !== token) return;
-        sizeToViewport(back);
+      onMediaReady(media, () => {
+        sizeToViewport(media);
+        // Crossfade
         back.classList.add('is-visible');
         front.classList.remove('is-visible');
+        // Pause previous video (if any) after fade starts
+        const prev = front.querySelector('.media');
+        if (prev && prev.tagName === 'VIDEO') { try { prev.pause(); } catch(e){} }
+        // Swap layers
         [front, back] = [back, front];
         updateInfo();
         preload(IMAGES[(index + 1) % IMAGES.length]);
-      };
-      back.src = nextSrc;
+      });
     }
 
     function shuffleTail(arr){
@@ -140,16 +170,20 @@
     });
 
     window.addEventListener('resize', () => {
-      sizeToViewport(front);
-      sizeToViewport(back);
+      const mA = front.querySelector('.media');
+      const mB = back.querySelector('.media');
+      if (mA) sizeToViewport(mA);
+      if (mB) sizeToViewport(mB);
     });
 
     (function init(){
       updateInfo();
       if (!IMAGES.length) return;
       const first = IMAGES[0];
-      front.onload = () => { sizeToViewport(front); front.classList.add('is-visible'); updateInfo(); preload(IMAGES[1 % IMAGES.length]); };
-      front.src = first;
+      // Load first into front without crossfade from blank
+      const media = createMedia(first);
+      front.appendChild(media);
+      onMediaReady(media, () => { sizeToViewport(media); front.classList.add('is-visible'); updateInfo(); preload(IMAGES[1 % IMAGES.length]); });
     })();
   </script>
 </body>
