@@ -5,7 +5,7 @@ permalink: /images.json
 
 [
 {% assign files = site.static_files | where_exp: "f", "f.path contains '/images/'" %}
-{% assign exts = "jpg,jpeg,png,gif,webp,webm,mp4" | split: "," %}
+{% assign exts = "jpg,jpeg,png,gif,webp,webm,mp4,mov" | split: "," %}
 {% assign first = true %}
 {% for f in files %}
   {% assign ext = f.extname | remove_first: "." | downcase %}
