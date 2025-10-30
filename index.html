@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Dynamic Slideshow (GitHub Pages)</title>
+  <style>
+    body { margin: 0; background: #7e5e7c; color: #fff; display: grid; place-items: center; height: 100vh; }
+    .stage { position: fixed; inset: 0; display: grid; place-items: center; cursor: pointer; }
+    .slide { position: absolute; inset: 0; display: grid; place-items: center; opacity: 0; transition: opacity 350ms ease; }
+    .slide.is-visible { opacity: 1; }
+    .media { max-width: 100vw; max-height: 100vh; }
+    .overlay { position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.5); padding: 6px 12px; border-radius: 8px; }
+  </style>
+</head>
+<body>
+  <div id="stage" class="stage">
+    <div class="slide" id="slideA"></div>
+    <div class="slide" id="slideB"></div>
+  </div>
+  <div id="info" class="overlay">0 / 0</div>
+
+  <script>
+    const info = document.getElementById('info');
+    const slideA = document.getElementById('slideA');
+    const slideB = document.getElementById('slideB');
+    const stage = document.getElementById('stage');
+
+    let IMAGES = [];
+    let index = 0, front = slideA, back = slideB;
+
+    function updateInfo(){ info.textContent = `${index + 1} / ${IMAGES.length}`; }
+    function isVideo(url){ return /\.(webm|mp4)$/i.test(url); }
+    function getNaturalSize(el){ return el.tagName === 'IMG' ? {w: el.naturalWidth, h: el.naturalHeight} : {w: el.videoWidth, h: el.videoHeight}; }
+    function sizeToViewport(el){
+      const vw = window.innerWidth, vh = window.innerHeight;
+      const {w,h} = getNaturalSize(el);
+      if(!w||!h)return;
+      const scale=Math.min(vw/w,vh/h);
+      el.style.width=w*scale+'px'; el.style.height=h*scale+'px';
+    }
+    function createMedia(url){
+      if(isVideo(url)){
+        const v=document.createElement('video');
+        Object.assign(v,{className:'media',playsInline:true,muted:true,loop:true,autoplay:true,src:url});
+        return v;
+      } else {
+        const im=document.createElement('img');
+        im.className='media'; im.src=url; return im;
+      }
+    }
+    function showImage(i){
+      if(!IMAGES.length)return;
+      index=(i+IMAGES.length)%IMAGES.length;
+      const src=IMAGES[index];
+      back.innerHTML=''; const m=createMedia(src); back.appendChild(m);
+      m.onload=m.onloadedmetadata=()=>{sizeToViewport(m); back.classList.add('is-visible'); front.classList.remove('is-visible'); [front,back]=[back,front]; updateInfo();};
+    }
+    stage.addEventListener('click',()=>showImage(index+1));
+    fetch('images.json').then(r=>r.json()).then(list=>{
+      IMAGES=list; if(!IMAGES.length)return;
+      const m=createMedia(IMAGES[0]); front.appendChild(m);
+      m.onload=m.onloadedmetadata=()=>{sizeToViewport(m); front.classList.add('is-visible'); updateInfo();};
+    });
+  </script>
+</body>
+</html>
